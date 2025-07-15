@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: terraform-neo4j-parser-test
+  
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: test
+    
+  data:
+    neo4j:
+      database: neo4j
+
+# Test-specific logging
+logging:
+  level:
+    com.terraform.neo4j: DEBUG
+    org.neo4j: WARN
+    org.springframework.data.neo4j: DEBUG
+    org.testcontainers: INFO

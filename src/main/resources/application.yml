@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: terraform-neo4j-parser
+  
+  neo4j:
+    # Neo4j Aura connection - replace YOUR_INSTANCE_ID with your actual Aura instance ID
+    uri: neo4j+s://9a0b0797.databases.neo4j.io
+    authentication:
+      username: neo4j
+      password:
+    
+  data:
+    neo4j:
+      database: neo4j
+
+server:
+  port: 8080
+
+# Swagger/OpenAPI configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+logging:
+  level:
+    com.terraform.neo4j: DEBUG
+    org.neo4j: INFO
+    org.springframework.data.neo4j: DEBUG
