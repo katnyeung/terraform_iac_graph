@@ -1,159 +1,104 @@
-# Terraform Infrastructure Simulator
+# Terraform Neo4j Parser
 
-An AI-powered infrastructure analysis platform that transforms Terraform code into an interactive, simulated environment for performance analysis and bottleneck detection.
+A Spring Boot application that parses Terraform configurations and creates intelligent graph representations in Neo4j for infrastructure analysis and visualization.
 
 ## 🚀 Overview
 
-Unlike traditional visualization tools that provide static diagrams, this project creates a **living, simulated infrastructure playground** where you can:
+This project transforms Terraform Infrastructure as Code (IaC) into structured graph data, enabling:
 
-- Transform Terraform configurations into executable simulations
-- Predict and visualize infrastructure bottlenecks before deployment
-- Use AI to analyze patterns and suggest optimizations
-- Interact with your infrastructure as if it were running
-
-## 🎯 What Makes This Different
-
-| Existing Tools (Cartography, Rover, etc.) | Our Simulator |
-|------------------------------------------|---------------|
-| Static visualization | Dynamic simulation |
-| Shows current state | Predicts future behavior |
-| Manual analysis | AI-powered insights |
-| Read-only viewing | Interactive playground |
-| Post-deployment analysis | Pre-deployment optimization |
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
-│   GitHub Repos      │────▶│   HCL4j Parser      │────▶│   LLM Analyzer      │
-│   (.tf files)       │     │   (Terraform → AST) │     │   (Context & Intent)│
-└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
-                                                                    │
-                                                          ┌─────────┴─────────┐
-                                                          │                   │
-                                                          ▼                   ▼
-┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
-│   Playground UI     │◀────│   Simulation        │◀────│   Neo4j Graph       │
-│   (Interactive)     │     │   Engine            │     │   (Smart Mapping)   │
-└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
-                                      ▲
-                                      │
-                            ┌─────────┴─────────┐
-                            │  LLM Benchmark    │
-                            │  (Validation)     │
-                            └───────────────────┘
-```
-
-### LLM-Powered Intelligence Layer
-
-The LLM analyzer acts as an intelligent bridge between raw Terraform parsing and graph storage:
-
-1. **Context Understanding**: Interprets the intent behind infrastructure configurations
-2. **Relationship Inference**: Discovers implicit dependencies not explicitly declared
-3. **Pattern Recognition**: Identifies common architectural patterns and anti-patterns
-4. **Semantic Enrichment**: Adds metadata about resource purposes and criticality
-5. **Optimization Suggestions**: Provides real-time recommendations during parsing
-
-### LLM Benchmark System
-
-A unique validation framework that ensures accuracy across different LLM providers:
-
-1. **Multi-Model Support**: Test against GPT-4, Claude, DeepSeek, Llama, and more
-2. **Ground Truth Validation**: Compare outputs against expert-validated test cases
-3. **Accuracy Metrics**: Measure relationship detection, context understanding, and pattern recognition
-4. **Performance Benchmarks**: Track speed and cost across different models
-5. **Consistency Scoring**: Ensure reproducible results across multiple runs
+- **Parse Terraform configurations** from text content or zip file uploads
+- **Extract infrastructure components** with provider detection and resource classification
+- **Store in Neo4j graph database** with intelligent property serialization
+- **REST API endpoints** for easy integration with other tools
+- **Identity resource detection** for security and compliance analysis
 
 ## 🔑 Key Features
 
-### Current Phase (MVP)
-- **Terraform Parsing**: Parse `.tf` files from GitHub repositories using HCL4j
-- **LLM Intelligence**: Analyze infrastructure intent and infer hidden relationships
-- **Smart Graph Database**: Store infrastructure in Neo4j with AI-enriched metadata
-- **Context-Aware Simulation**: Create virtual infrastructure with behavioral predictions
-- **Interactive Visualization**: Navigate and explore your AI-analyzed infrastructure
-- **LLM Benchmark Suite**: Validate and compare accuracy across different AI models
+### ✅ Current Implementation (v1.0)
+- **Terraform Parsing**: Parse `.tf` files using HCL4j with comprehensive error handling
+- **REST API Endpoints**: 
+  - `POST /api/terraform/parse` - Parse Terraform content from JSON requests
+  - `POST /api/terraform/parse-zip` - Upload and parse zip files containing .tf files
+- **Neo4j Integration**: Store infrastructure components in Neo4j Aura with intelligent property serialization
+- **Provider Detection**: Automatically detect cloud providers (AWS, GCP, Azure, Kubernetes, Helm, Docker)
+- **Identity Resource Classification**: Distinguish between identity resources and regular infrastructure
+- **Complex Property Handling**: Serialize nested configurations (like Helm charts) to JSON strings
+- **Comprehensive Error Handling**: Proper HTTP status codes and detailed error responses
+- **API Documentation**: Full Swagger/OpenAPI 3 documentation with interactive UI
+- **Input Validation**: Request validation with detailed error messages
+- **File Upload Support**: Handle zip file uploads with Terraform configurations
 
-### Unique LLM Capabilities
-- **Semantic Understanding**: LLM understands what your infrastructure is trying to achieve
-- **Hidden Dependencies**: Discovers relationships not explicitly declared in Terraform
-- **Business Context**: Maps technical resources to business purposes
-- **Intelligent Suggestions**: Provides optimization recommendations in natural language
-- **Pattern Learning**: Recognizes and warns about common architectural mistakes
-- **Model Validation**: Benchmark different LLMs to ensure accurate infrastructure analysis
-
-### LLM Benchmark Features
-- **Ground Truth Testing**: Validate against expert-curated infrastructure patterns
-- **Multi-Model Comparison**: Test GPT-4, Claude, DeepSeek, Llama side-by-side
-- **Accuracy Metrics**: Measure precision/recall for relationship detection
-- **Consistency Checks**: Ensure deterministic results across multiple runs
-- **Cost Analysis**: Compare API costs vs accuracy trade-offs
-
-### Future Roadmap
-- **Conversational Infrastructure**: Chat with your infrastructure using natural language
-- **Predictive Scaling**: LLM predicts traffic patterns and suggests auto-scaling rules
-- **Multi-IaC Understanding**: Unified analysis across Terraform, CloudFormation, Pulumi
-- **Automated Remediation**: LLM generates Terraform code to fix identified issues
-- **Team Knowledge Base**: LLM learns from your team's infrastructure patterns
+### 🔧 Recent Improvements
+- **Fixed Neo4j Property Serialization**: Resolved issues with complex nested objects (like Helm chart configurations)
+- **Enhanced Error Handling**: Better handling of parsing errors and validation failures
+- **Neo4j Aura Support**: Configured for cloud Neo4j instances with secure connections
+- **Improved Property Storage**: Complex properties are now serialized to JSON strings for Neo4j compatibility
 
 ## 🛠️ Technology Stack
 
-- **Backend**: Spring Boot (Java)
+- **Backend**: Spring Boot 3.2.0 (Java 17+)
 - **Parser**: HCL4j for Terraform configuration parsing
-- **AI Layer**: Multiple LLM support (GPT-4, Claude, DeepSeek, Llama)
-- **Benchmark Framework**: Custom validation suite with ground truth data
-- **Database**: Neo4j for graph-based infrastructure representation
-- **ML Models**: TensorFlow/PyTorch for bottleneck prediction
-- **Visualization**: D3.js/Cytoscape.js for interactive graphs
-- **Simulation Engine**: Custom event-driven simulator
+- **Database**: Neo4j Aura (Cloud) / Neo4j 5.0+ for graph storage
+- **Build Tool**: Maven 3.8+
+- **API Documentation**: Swagger/OpenAPI 3 with SpringDoc
+- **Testing**: JUnit 5, Mockito, Spring Boot Test
+- **Validation**: Jakarta Bean Validation
+- **JSON Processing**: Jackson for complex property serialization
 
 ## 📋 Prerequisites
 
 - Java 17+
-- Neo4j 5.0+
+- Neo4j Aura account (or Neo4j 5.0+ local installation)
 - Maven 3.8+
-- GitHub personal access token (for repository access)
-- LLM API keys (at least one of: OpenAI, Anthropic, DeepSeek)
 
 ## 🚦 Getting Started
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/terraform-infrastructure-simulator.git
-cd terraform-infrastructure-simulator
+git clone https://github.com/katnyeung/terraform-neo4j-parser.git
+cd terraform-neo4j-parser
 ```
 
-### 2. Configure application properties
+### 2. Configure Neo4j Connection
+Update `src/main/resources/application.yml`:
+
 ```yaml
-# src/main/resources/application.yml
 spring:
+  application:
+    name: terraform-neo4j-parser
+  
   neo4j:
-    uri: bolt://localhost:7687
+    # For Neo4j Aura (recommended)
+    uri: neo4j+s://YOUR_INSTANCE_ID.databases.neo4j.io
     authentication:
       username: neo4j
-      password: your-password
-
-github:
-  token: ${GITHUB_TOKEN}
-
-# LLM Providers Configuration
-ai:
-  providers:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      model: "gpt-4-turbo-preview"
-    anthropic:
-      api-key: ${ANTHROPIC_API_KEY}
-      model: "claude-3-opus"
-    deepseek:
-      api-key: ${DEEPSEEK_API_KEY}
-      model: "deepseek-coder"
+      password: your-aura-password
     
-  # Benchmark Configuration
-  benchmark:
+    # For local Neo4j installation
+    # uri: bolt://localhost:7687
+    # authentication:
+    #   username: neo4j
+    #   password: your-local-password
+    
+  data:
+    neo4j:
+      database: neo4j
+
+server:
+  port: 8080
+
+# API Documentation
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
     enabled: true
-    test-suite-path: "src/test/resources/benchmark-suite"
-    ground-truth-path: "src/test/resources/ground-truth"
+
+logging:
+  level:
+    com.terraform.neo4j: DEBUG
+    org.neo4j: INFO
 ```
 
 ### 3. Build and run
@@ -162,356 +107,218 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-### 4. Access the playground
-Navigate to `http://localhost:8080` to access the interactive playground.
+### 4. Access the API Documentation
+Navigate to `http://localhost:8080/swagger-ui.html` to access the interactive API documentation.
 
-### 5. Run LLM Benchmark (Optional)
+### 5. Test the API Endpoints
+
+#### Parse Terraform Content
 ```bash
-# Run benchmark suite
-mvn test -Dtest=LLMBenchmarkSuite
-
-# Or via API
-curl -X POST http://localhost:8080/api/benchmark/run \
+curl -X POST http://localhost:8080/api/terraform/parse \
   -H "Content-Type: application/json" \
-  -d '{"models": ["gpt-4", "claude-3", "deepseek"]}'
+  -d '{
+    "content": "resource \"aws_instance\" \"web\" {\n  ami = \"ami-12345\"\n  instance_type = \"t2.micro\"\n}",
+    "description": "Test infrastructure"
+  }'
+```
+
+#### Upload Terraform Zip File
+```bash
+curl -X POST http://localhost:8080/api/terraform/parse-zip \
+  -F "file=@terraform-configs.zip"
 ```
 
 ## 💡 How It Works
 
-### 1. Infrastructure Parsing with HCL4j
+### 1. Terraform Parsing
+The application uses HCL4j to parse Terraform configurations:
+
 ```java
 @Service
 public class TerraformParser {
-    public ParsedInfrastructure parse(String terraformCode) {
-        // Parse Terraform using HCL4j
-        Map<String, Object> rawConfig = hclParser.parse(terraformCode);
-        
-        // Extract basic structure
-        List<RawResource> resources = extractResources(rawConfig);
-        Map<String, Object> variables = extractVariables(rawConfig);
-        
-        return new ParsedInfrastructure(resources, variables, rawConfig);
+    public ParsedTerraform parse(List<TerraformFile> files) {
+        // Parse each .tf file using HCL4j
+        // Extract resources, variables, outputs, and providers
+        // Handle parsing errors gracefully
+        return parsedResult;
     }
 }
 ```
 
-### 2. LLM-Powered Intelligent Analysis
-```java
-@Service
-public class LLMInfrastructureAnalyzer {
-    private final LLMService llmService;
-    
-    public EnrichedInfrastructure analyze(ParsedInfrastructure parsed) {
-        // Create context-aware prompt
-        String prompt = buildAnalysisPrompt(parsed);
-        
-        // LLM analyzes infrastructure intent and relationships
-        LLMResponse analysis = llmService.analyze(prompt, """
-            Analyze this Terraform configuration and provide:
-            1. Resource purposes and business context
-            2. Implicit dependencies not declared in code
-            3. Potential bottlenecks and scaling issues
-            4. Security concerns and best practice violations
-            5. Suggested Neo4j graph structure with relationships
-        """);
-        
-        // Parse LLM insights
-        return new EnrichedInfrastructure(
-            extractResourceContext(analysis),
-            inferRelationships(analysis),
-            identifyPatterns(analysis),
-            extractOptimizations(analysis)
-        );
-    }
-    
-    private List<InferredRelationship> inferRelationships(LLMResponse analysis) {
-        // LLM identifies relationships like:
-        // - "ECS tasks will connect to RDS through security group X"
-        // - "Lambda functions depend on S3 bucket for data processing"
-        // - "API Gateway routes traffic to multiple backend services"
-        return analysis.getInferredRelationships();
-    }
-}
-```
-
-### 3. Intelligent Neo4j Mapping
-```java
-@Service
-public class SmartGraphMapper {
-    private final Neo4jTemplate neo4jTemplate;
-    private final LLMService llmService;
-    
-    public void mapToGraph(EnrichedInfrastructure enriched) {
-        // LLM suggests optimal graph structure
-        GraphSchema schema = llmService.suggestGraphSchema(enriched);
-        
-        // Create nodes with LLM-enriched metadata
-        for (EnrichedResource resource : enriched.getResources()) {
-            createNodeWithContext(resource, schema);
-        }
-        
-        // Create relationships with semantic meaning
-        for (InferredRelationship rel : enriched.getRelationships()) {
-            createSmartRelationship(rel);
-        }
-        
-        // Add LLM-suggested indexes for performance
-        createOptimalIndexes(schema.getSuggestedIndexes());
-    }
-    
-    private void createNodeWithContext(EnrichedResource resource, GraphSchema schema) {
-        Map<String, Object> properties = new HashMap<>();
-        properties.put("id", resource.getId());
-        properties.put("type", resource.getType());
-        properties.put("businessPurpose", resource.getBusinessContext());
-        properties.put("criticalityScore", resource.getCriticality());
-        properties.put("scalingProfile", resource.getScalingCharacteristics());
-        properties.put("costProfile", resource.getCostEstimate());
-        
-        neo4jTemplate.query("""
-            CREATE (n:%s $props)
-            """.formatted(schema.getNodeLabel(resource)))
-            .bind(properties).to("props")
-            .run();
-    }
-}
-```
-
-### 4. Simulation Engine with AI Insights
+### 2. Resource Extraction and Classification
 ```java
 @Component
-public class IntelligentSimulator {
-    private final LLMService llmService;
-    
-    public SimulationResult simulate(Neo4jGraph graph, WorkloadProfile workload) {
-        // LLM predicts behavior patterns
-        BehaviorPrediction prediction = llmService.predictBehavior(graph, workload);
-        
-        // Create virtual infrastructure with predicted characteristics
-        VirtualInfrastructure virtualInfra = createVirtualComponents(graph, prediction);
-        
-        // Run simulation with LLM-guided scenarios
-        SimulationMetrics metrics = runIntelligentSimulation(virtualInfra, workload, prediction);
-        
-        // LLM analyzes results and provides insights
-        List<Bottleneck> bottlenecks = llmService.analyzeSimulationResults(metrics);
-        List<Optimization> optimizations = llmService.suggestOptimizations(metrics, graph);
-        
-        return new SimulationResult(metrics, bottlenecks, optimizations);
+public class BasicResourceExtractor {
+    public List<InfrastructureComponent> extractComponents(ParsedTerraform parsed) {
+        // Convert Terraform resources to infrastructure components
+        // Detect cloud providers (AWS, GCP, Azure, etc.)
+        // Classify identity resources vs regular resources
+        // Generate unique IDs for each component
+        return components;
     }
-}
-
-## 📊 Example Use Cases
-
-### 1. Intelligent Relationship Discovery
-```hcl
-# Your Terraform code
-resource "aws_ecs_service" "api" {
-  name = "user-api"
-  desired_count = 10
-}
-
-resource "aws_rds_instance" "database" {
-  instance_class = "db.t3.micro"
-  database_name = "users"
 }
 ```
 
-**LLM Analysis Output**: 
-- 🧠 Inferred relationship: "user-api service likely connects to users database"
-- 🔍 Pattern detected: "Microservice architecture with potential N+1 query issues"
-- ⚡ Performance insight: "10 ECS tasks sharing 1 micro RDS instance = bottleneck"
-- 💡 Recommendation: "Implement connection pooling or upgrade to db.t3.medium"
-
-### 2. Context-Aware Architecture Understanding
-The LLM understands the business context of your infrastructure:
-- Identifies that "user-api" is likely a customer-facing service (high criticality)
-- Recognizes "analytics-cluster" as batch processing (can tolerate delays)
-- Suggests appropriate monitoring and scaling strategies for each
-
-### 3. Multi-Resource Correlation
-The LLM can identify complex relationships across multiple resources:
-- Traces data flow from API Gateway → Lambda → SQS → ECS → RDS
-- Identifies potential cascading failures
-- Suggests circuit breakers and retry mechanisms
-
-## 🧪 LLM Benchmark System
-
-### How It Works
-
-The benchmark system validates LLM accuracy using standardized test cases:
-
+### 3. Neo4j Graph Mapping
 ```java
 @Service
-public class LLMBenchmarkService {
-    private final Map<String, LLMProvider> providers = Map.of(
-        "gpt-4", new OpenAIProvider(),
-        "claude-3", new ClaudeProvider(),
-        "deepseek", new DeepSeekProvider(),
-        "llama-3", new LlamaProvider()
-    );
-    
-    public BenchmarkReport runBenchmark(String terraformCode) {
-        // Parse Terraform to get ground truth
-        GroundTruth truth = loadGroundTruth(terraformCode);
-        
-        // Test each LLM provider
-        Map<String, ModelResult> results = new HashMap<>();
-        for (var entry : providers.entrySet()) {
-            ModelResult result = testModel(entry.getValue(), terraformCode, truth);
-            results.put(entry.getKey(), result);
-        }
-        
-        // Generate comparative report
-        return generateReport(results, truth);
+public class SimpleNeo4jMapper {
+    public void mapToGraph(List<InfrastructureComponent> components) {
+        // Serialize complex properties to JSON strings
+        // Create Resource nodes in Neo4j
+        // Handle nested configurations (like Helm charts)
+        // Set up indexes for performance
     }
 }
 ```
 
-### Benchmark Test Cases
+## 📊 API Response Examples
 
-```yaml
-# benchmark-suite.yaml
-test_cases:
-  - name: "Basic EC2 with RDS"
-    terraform_file: "tests/basic-ec2-rds.tf"
-    expected_relationships:
-      - source: "aws_instance.web"
-        target: "aws_db_instance.main"
-        type: "CONNECTS_TO"
-        confidence: 0.95
-    expected_patterns:
-      - "Two-tier architecture"
-      - "Potential single point of failure"
-    
-  - name: "Complex Microservices"
-    terraform_file: "tests/microservices.tf"
-    expected_relationships:
-      - source: "aws_api_gateway.api"
-        target: "aws_lambda_function.handler"
-        type: "ROUTES_TO"
-      - source: "aws_lambda_function.handler"
-        target: "aws_sqs_queue.tasks"
-        type: "PUBLISHES_TO"
-```
-
-### Accuracy Metrics
-
-```java
-public class AccuracyMetrics {
-    // Relationship Detection
-    double relationshipPrecision;    // Correctly identified / Total identified
-    double relationshipRecall;       // Correctly identified / Total expected
-    
-    // Context Understanding
-    double businessContextAccuracy;  // Correct purpose identification
-    double patternRecognitionRate;   // Architectural patterns detected
-    
-    // Performance Metrics
-    long inferenceTimeMs;           // Time to analyze
-    double apiCost;                 // Cost per analysis
-    
-    // Consistency Score
-    double deterministicScore;      // Same results across runs
-}
-```
-
-### Benchmark Dashboard
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  LLM Benchmark Results                       │
-├─────────────┬──────────┬────────┬──────────┬──────────────┤
-│    Model    │ Accuracy │ Speed  │   Cost   │ Consistency  │
-├─────────────┼──────────┼────────┼──────────┼──────────────┤
-│ GPT-4       │  94.2%   │ 2.3s   │ $0.0034  │    98.5%     │
-│ Claude-3    │  96.1%   │ 1.8s   │ $0.0028  │    99.2%     │
-│ DeepSeek    │  91.7%   │ 1.2s   │ $0.0012  │    97.8%     │
-│ Llama-3     │  88.3%   │ 0.9s   │ $0.0008  │    96.4%     │
-└─────────────┴──────────┴────────┴──────────┴──────────────┘
-
-Detailed Analysis:
-✓ Claude-3 shows best accuracy for relationship inference
-✓ DeepSeek offers best cost/performance ratio
-✓ GPT-4 excels at complex architectural patterns
-✓ Llama-3 fastest but needs fine-tuning for IaC
-```
-
-### Ground Truth Validation
-
-```java
-@Component
-public class GroundTruthValidator {
-    public ValidationResult validate(LLMOutput llmOutput, GroundTruth truth) {
-        // Compare detected relationships
-        Set<Relationship> detected = llmOutput.getRelationships();
-        Set<Relationship> expected = truth.getRelationships();
-        
-        // Calculate metrics
-        Set<Relationship> truePositives = intersection(detected, expected);
-        Set<Relationship> falsePositives = difference(detected, expected);
-        Set<Relationship> falseNegatives = difference(expected, detected);
-        
-        // Generate detailed report
-        return ValidationResult.builder()
-            .precision(truePositives.size() / (double) detected.size())
-            .recall(truePositives.size() / (double) expected.size())
-            .f1Score(calculateF1Score())
-            .detailedMismatches(analyzeMismatches())
-            .build();
+### Successful Parse Response
+```json
+{
+  "success": true,
+  "message": "Successfully parsed and mapped 5 resources to Neo4j graph",
+  "resourceCount": 5,
+  "identityResourceCount": 2,
+  "regularResourceCount": 3,
+  "providersDetected": ["AWS", "GCP"],
+  "resourceTypeSummary": [
+    {
+      "resourceType": "aws_instance",
+      "count": 2
+    },
+    {
+      "resourceType": "google_service_account",
+      "count": 1
     }
+  ],
+  "timestamp": "2024-07-15T22:30:00"
 }
 ```
 
-## 🤖 AI Models
-
-The simulator uses a hybrid AI approach:
-
-### 1. **LLM Analysis Layer** (GPT-4/Claude/Llama)
-- **Context Understanding**: Interprets infrastructure intent and business logic
-- **Relationship Inference**: Discovers implicit dependencies between resources
-- **Pattern Recognition**: Identifies architectural patterns and anti-patterns
-- **Natural Language Insights**: Provides human-readable explanations
-
-### 2. **Specialized ML Models**
-- **Bottleneck Predictor**: Neural network trained on performance metrics
-- **Cost Optimizer**: Regression models for resource right-sizing
-- **Failure Predictor**: Anomaly detection using historical patterns
-
-### 3. **LLM-Enhanced Features**
-```java
-// Example: LLM analyzing security groups
-LLMSecurityAnalysis analysis = llmService.analyzeSecurityPosture(terraformCode);
-// Output: "Port 22 is open to 0.0.0.0/0 in production environment. 
-//          This poses a security risk. Consider restricting to bastion host."
+### Error Response
+```json
+{
+  "status": 422,
+  "error": "PARSING_ERROR",
+  "message": "Terraform configuration contains parsing errors",
+  "details": [
+    "Invalid HCL syntax at line 5",
+    "Unknown resource type at line 12"
+  ],
+  "path": "/api/terraform/parse",
+  "timestamp": "2024-07-15T22:30:00"
+}
 ```
 
-## 🔮 Future Vision
+## 🏗️ Architecture
 
-### Phase 2: Real-time Workload Simulation
-- Import actual workload patterns from monitoring tools
-- Replay production scenarios in the simulator
-- Time-travel debugging for infrastructure issues
+```
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│   REST API          │────▶│   HCL4j Parser      │────▶│   Resource          │
+│   (Spring Boot)     │     │   (Terraform → AST) │     │   Extractor         │
+└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
+           │                                                        │
+           │                                                        ▼
+           │                 ┌─────────────────────┐     ┌─────────────────────┐
+           │                 │   Error Handler     │     │   Neo4j Mapper      │
+           └────────────────▶│   (Global)          │     │   (Graph Storage)   │
+                             └─────────────────────┘     └─────────────────────┘
+                                                                    │
+                                                                    ▼
+                                                         ┌─────────────────────┐
+                                                         │   Neo4j Aura        │
+                                                         │   (Cloud Database)  │
+                                                         └─────────────────────┘
+```
 
-### Phase 3: Multi-IaC Support
-- Support for OpenTofu, Pulumi, CloudFormation
-- Cross-IaC dependency analysis
-- Unified simulation across different IaC tools
+## 🔧 Supported Terraform Resources
 
-### Phase 4: Collaborative Playground
-- Multi-user infrastructure planning sessions
-- Version control for simulation scenarios
-- Infrastructure change impact analysis
+### Cloud Providers
+- **AWS**: `aws_*` resources (EC2, RDS, Lambda, etc.)
+- **Google Cloud**: `google_*` resources (Compute Engine, Cloud SQL, etc.)
+- **Azure**: `azurerm_*` resources (Virtual Machines, Storage, etc.)
+
+### Container Orchestration
+- **Kubernetes**: `kubernetes_*` resources
+- **Helm**: `helm_release` resources (with complex property handling)
+- **Docker**: `docker_*` resources
+
+### Identity Resources Detection
+The system automatically identifies identity-related resources:
+- AWS IAM roles, users, policies
+- Google Cloud service accounts
+- Azure managed identities
+- Kubernetes service accounts
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Neo4j Connection Errors
+```
+Error: Failed to connect to Neo4j
+```
+**Solution**: Check your Neo4j Aura URI and credentials in `application.yml`
+
+#### Complex Property Serialization Errors
+```
+Error: Property values can only be of primitive types
+```
+**Solution**: This has been fixed in the latest version. Complex properties are now serialized to JSON strings.
+
+#### Terraform Parsing Errors
+```
+Error: HCL parsing error
+```
+**Solution**: Validate your Terraform syntax. The API will return detailed error messages.
+
+## 🚀 Future Roadmap
+
+### Phase 2: LLM-Powered Intelligence Layer
+- **Relationship Inference**: Use LLM to discover implicit dependencies between resources
+- **Context Understanding**: LLM interprets infrastructure intent and business logic
+- **Pattern Recognition**: Identify architectural patterns and anti-patterns using AI
+- **Security Analysis**: LLM-powered security misconfiguration detection
+
+### Phase 3: Pre-Deployment Simulation
+- **LLM Infrastructure Simulation**: Simulate infrastructure behavior before `terraform apply`
+  - Predict resource interactions and potential bottlenecks
+  - Estimate performance characteristics and scaling behavior
+  - Identify potential failure points and cascading issues
+  - Generate "what-if" scenarios for different workload patterns
+- **Cost Prediction**: LLM estimates infrastructure costs and suggests optimizations
+- **Risk Assessment**: Analyze deployment risks and suggest mitigation strategies
+
+### Phase 4: LLM Benchmark & Validation System
+- **Multi-Model Comparison**: Benchmark different LLMs (GPT-4, Claude, DeepSeek, Llama) for infrastructure analysis
+- **Accuracy Metrics**: Measure precision/recall for relationship detection and pattern recognition
+- **Ground Truth Validation**: Test against expert-curated infrastructure scenarios
+- **Performance Benchmarking**: Compare speed, cost, and consistency across LLM providers
+- **Model Selection**: Automatically choose the best LLM for specific infrastructure analysis tasks
+
+### Phase 5: Advanced Features
+- **Conversational Infrastructure**: Chat with your infrastructure using natural language
+- **Multi-IaC Support**: Unified analysis across Terraform, CloudFormation, Pulumi
+- **Interactive Visualization**: LLM-enhanced graph visualization with natural language queries
+- **Automated Remediation**: LLM generates Terraform code to fix identified issues
+- **Team Knowledge Base**: LLM learns from your organization's infrastructure patterns
+
+### Phase 6: Production Integration
+- **CI/CD Integration**: Pre-deployment simulation in your pipeline
+- **Real-time Monitoring**: Compare LLM predictions with actual infrastructure behavior
+- **Continuous Learning**: Improve LLM accuracy based on production feedback
+- **Multi-Cloud Optimization**: LLM suggests optimal resource placement across cloud providers
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Areas where you can help:
 
-### Areas We Need Help
-- AI model training data and algorithms
-- Simulation accuracy improvements
-- UI/UX for the interactive playground
-- Cloud provider-specific optimizations
+- **Parser Improvements**: Better handling of complex Terraform configurations
+- **Provider Support**: Add support for more cloud providers
+- **Testing**: Improve test coverage and add integration tests
+- **Documentation**: Improve API documentation and examples
 
 ## 📄 License
 
@@ -519,16 +326,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- HCL4j team for the excellent Terraform parser
-- Neo4j for the powerful graph database
-- The open-source community for inspiration and support
+- [HCL4j](https://github.com/bertramlabs/hcl4j) team for the excellent Terraform parser
+- [Neo4j](https://neo4j.com/) for the powerful graph database
+- [Spring Boot](https://spring.io/projects/spring-boot) community for the robust framework
 
 ## 📧 Contact
 
-- Project Lead: Wing YEUNG
-- Email: katnyeung@gmail.com
+- **Project Lead**: Wing YEUNG
+- **Email**: katnyeung@gmail.com
+- **GitHub**: http://github.com/katnyeung
 
 ---
 
-**Note**: This project is in active development. The simulator is not a replacement for actual testing but a powerful pre-deployment analysis tool to help you build more efficient infrastructure.
-This readme is generated by cladue sonnet 4
+**Note**: This project focuses on parsing and storing Terraform configurations in Neo4j. It provides a solid foundation for building more advanced infrastructure analysis tools.
