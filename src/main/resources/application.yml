@@ -4,7 +4,7 @@ spring:
   
   neo4j:
     # Neo4j Aura connection - replace YOUR_INSTANCE_ID with your actual Aura instance ID
-    uri: neo4j+s://9a0b0797.databases.neo4j.io
+    uri: neo4j+s://na.databases.neo4j.io
     authentication:
       username: neo4j
       password:

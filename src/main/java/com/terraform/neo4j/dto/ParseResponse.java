@@ -4,6 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Response DTO for Terraform parsing operations.
@@ -39,11 +41,15 @@ public class ParseResponse {
     @Schema(description = "Summary of resource types found")
     private List<ResourceTypeSummary> resourceTypeSummary;
 
+    @Schema(description = "Additional properties from LLM analysis")
+    private Map<String, Object> additionalProperties;
+
     // Default constructor
     public ParseResponse() {
         this.providersDetected = new ArrayList<>();
         this.errors = new ArrayList<>();
         this.resourceTypeSummary = new ArrayList<>();
+        this.additionalProperties = new HashMap<>();
         this.timestamp = LocalDateTime.now();
     }
 
@@ -164,6 +170,20 @@ public class ParseResponse {
 
     public boolean hasErrors() {
         return !errors.isEmpty();
+    }
+
+    public Map<String, Object> getAdditionalProperties() {
+        return additionalProperties;
+    }
+
+    public void setAdditionalProperties(Map<String, Object> additionalProperties) {
+        this.additionalProperties = additionalProperties != null ? new HashMap<>(additionalProperties) : new HashMap<>();
+    }
+
+    public void addProperty(String key, Object value) {
+        if (key != null && !key.trim().isEmpty()) {
+            this.additionalProperties.put(key, value);
+        }
     }
 
     @Override
