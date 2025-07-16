@@ -11,6 +11,9 @@ import com.terraform.neo4j.service.BasicResourceExtractor;
 import com.terraform.neo4j.service.FileInputHandler;
 import com.terraform.neo4j.service.SimpleNeo4jMapper;
 import com.terraform.neo4j.service.TerraformParser;
+import com.terraform.neo4j.service.TerraformSummarizer;
+import com.terraform.neo4j.service.LLMInfrastructureAnalyzer;
+import com.terraform.neo4j.service.IntelligentNeo4jMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -50,15 +53,24 @@ public class TerraformController {
     private final TerraformParser terraformParser;
     private final BasicResourceExtractor resourceExtractor;
     private final SimpleNeo4jMapper neo4jMapper;
+    private final TerraformSummarizer terraformSummarizer;
+    private final LLMInfrastructureAnalyzer llmAnalyzer;
+    private final IntelligentNeo4jMapper intelligentMapper;
 
     public TerraformController(FileInputHandler fileInputHandler,
                              TerraformParser terraformParser,
                              BasicResourceExtractor resourceExtractor,
-                             SimpleNeo4jMapper neo4jMapper) {
+                             SimpleNeo4jMapper neo4jMapper,
+                             TerraformSummarizer terraformSummarizer,
+                             LLMInfrastructureAnalyzer llmAnalyzer,
+                             IntelligentNeo4jMapper intelligentMapper) {
         this.fileInputHandler = fileInputHandler;
         this.terraformParser = terraformParser;
         this.resourceExtractor = resourceExtractor;
         this.neo4jMapper = neo4jMapper;
+        this.terraformSummarizer = terraformSummarizer;
+        this.llmAnalyzer = llmAnalyzer;
+        this.intelligentMapper = intelligentMapper;
     }
 
     @Operation(
@@ -115,15 +127,27 @@ public class TerraformController {
                                 parsed.getParseErrors()));
             }
 
-            // Extract infrastructure components
+            // NEW INTELLIGENT FLOW:
+
+            // 1. Create JSON summary for LLM analysis
+            String terraformSummary = terraformSummarizer.createSummary(parsed);
+            logger.debug("Created Terraform summary for LLM analysis");
+
+            // 2. Analyze with LLM to get relationships and insights
+            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(terraformSummary);
+            logger.info("LLM analysis completed with {} relationships and {} insights",
+                       llmAnalysis.getRelationships().size(), llmAnalysis.getInsights().size());
+
+            // 3. Extract infrastructure components (for basic node creation)
             List<InfrastructureComponent> components = resourceExtractor.extractComponents(parsed);
 
-            // Map to Neo4j graph
-            neo4jMapper.mapToGraph(components);
+            // 4. Create intelligent Neo4j graph with LLM-derived relationships
+            intelligentMapper.mapToIntelligentGraph(components, llmAnalysis);
 
-            // Build response
-            ParseResponse response = buildParseResponse(components, parsed);
-            response.setMessage("Successfully parsed and mapped " + components.size() + " resources to Neo4j graph");
+            // Build enhanced response
+            ParseResponse response = buildEnhancedParseResponse(components, parsed, llmAnalysis);
+            response.setMessage(String.format("Successfully parsed and mapped %d resources with %d intelligent relationships to Neo4j graph",
+                                            components.size(), llmAnalysis.getRelationships().size()));
 
             logger.info("Successfully processed Terraform content: {} resources mapped to graph", components.size());
             return ResponseEntity.ok(response);
@@ -216,16 +240,27 @@ public class TerraformController {
                                 parsed.getParseErrors()));
             }
 
-            // Extract infrastructure components
+            // NEW INTELLIGENT FLOW (same as parse endpoint):
+
+            // 1. Create JSON summary for LLM analysis
+            String terraformSummary = terraformSummarizer.createSummary(parsed);
+            logger.debug("Created Terraform summary for LLM analysis");
+
+            // 2. Analyze with LLM to get relationships and insights
+            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(terraformSummary);
+            logger.info("LLM analysis completed with {} relationships and {} insights",
+                       llmAnalysis.getRelationships().size(), llmAnalysis.getInsights().size());
+
+            // 3. Extract infrastructure components (for basic node creation)
             List<InfrastructureComponent> components = resourceExtractor.extractComponents(parsed);
 
-            // Map to Neo4j graph
-            neo4jMapper.mapToGraph(components);
+            // 4. Create intelligent Neo4j graph with LLM-derived relationships
+            intelligentMapper.mapToIntelligentGraph(components, llmAnalysis);
 
-            // Build response
-            ParseResponse response = buildParseResponse(components, parsed);
-            response.setMessage(String.format("Successfully parsed %d Terraform files and mapped %d resources to Neo4j graph", 
-                                            terraformFiles.size(), components.size()));
+            // Build enhanced response
+            ParseResponse response = buildEnhancedParseResponse(components, parsed, llmAnalysis);
+            response.setMessage(String.format("Successfully parsed %d Terraform files and mapped %d resources with %d intelligent relationships to Neo4j graph",
+                                            terraformFiles.size(), components.size(), llmAnalysis.getRelationships().size()));
 
             logger.info("Successfully processed Terraform zip: {} files, {} resources mapped to graph", 
                        terraformFiles.size(), components.size());
@@ -258,6 +293,70 @@ public class TerraformController {
                 }
             }
         }
+    }
+
+    /**
+     * Builds an enhanced ParseResponse with LLM analysis results.
+     *
+     * @param components List of infrastructure components
+     * @param parsed Parsed Terraform configuration
+     * @param llmAnalysis LLM analysis results
+     * @return Enhanced ParseResponse with relationships and insights
+     */
+    private ParseResponse buildEnhancedParseResponse(List<InfrastructureComponent> components,
+                                                   ParsedTerraform parsed,
+                                                   LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis) {
+        ParseResponse response = ParseResponse.success("Intelligent parsing completed successfully", components.size());
+
+        // Count identity vs regular resources
+        long identityCount = components.stream()
+                .filter(c -> c.getIdentityType() == IdentityType.IDENTITY_RESOURCE)
+                .count();
+        long regularCount = components.size() - identityCount;
+
+        response.setIdentityResourceCount((int) identityCount);
+        response.setRegularResourceCount((int) regularCount);
+
+        // Collect unique providers
+        List<String> providers = components.stream()
+                .map(InfrastructureComponent::getProvider)
+                .distinct()
+                .filter(provider -> !"UNKNOWN".equals(provider))
+                .collect(Collectors.toList());
+        response.setProvidersDetected(providers);
+
+        // Create resource type summary
+        Map<String, Long> resourceTypeCounts = components.stream()
+                .collect(Collectors.groupingBy(InfrastructureComponent::getType, Collectors.counting()));
+
+        resourceTypeCounts.forEach((type, count) ->
+                response.addResourceTypeSummary(type, count.intValue()));
+
+        // Add LLM analysis insights to response
+        if (llmAnalysis != null) {
+            // Add relationship count information
+            response.addProperty("relationshipsFound", llmAnalysis.getRelationships().size());
+            response.addProperty("insightsGenerated", llmAnalysis.getInsights().size());
+
+            // Add architecture summary
+            if (llmAnalysis.getSummary() != null) {
+                response.addProperty("architectureType", llmAnalysis.getSummary().getArchitectureType());
+                response.addProperty("complexity", llmAnalysis.getSummary().getComplexity());
+                response.addProperty("mainPurpose", llmAnalysis.getSummary().getMainPurpose());
+            }
+
+            // Add high-severity insights as warnings
+            llmAnalysis.getInsights().stream()
+                    .filter(insight -> "HIGH".equals(insight.getSeverity()))
+                    .forEach(insight -> response.addError("HIGH PRIORITY: " + insight.getTitle() + " - " + insight.getDescription()));
+        }
+
+        // Add any parsing errors
+        if (parsed.hasParseErrors()) {
+            response.setErrors(parsed.getParseErrors());
+        }
+
+        return response;
     }
 
     /**
