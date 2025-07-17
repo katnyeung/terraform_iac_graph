@@ -3,17 +3,13 @@ package com.terraform.neo4j.controller;
 import com.terraform.neo4j.dto.ErrorResponse;
 import com.terraform.neo4j.dto.ParseRequest;
 import com.terraform.neo4j.dto.ParseResponse;
-import com.terraform.neo4j.model.InfrastructureComponent;
-import com.terraform.neo4j.model.IdentityType;
-import com.terraform.neo4j.model.ParsedTerraform;
+
 import com.terraform.neo4j.model.TerraformFile;
-import com.terraform.neo4j.service.BasicResourceExtractor;
+import com.terraform.neo4j.model.MergedTerraformText;
 import com.terraform.neo4j.service.FileInputHandler;
-import com.terraform.neo4j.service.SimpleNeo4jMapper;
-import com.terraform.neo4j.service.TerraformParser;
-import com.terraform.neo4j.service.TerraformSummarizer;
 import com.terraform.neo4j.service.LLMInfrastructureAnalyzer;
-import com.terraform.neo4j.service.IntelligentNeo4jMapper;
+import com.terraform.neo4j.service.TerraformTextMerger;
+import com.terraform.neo4j.service.DirectNeo4jMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -50,27 +46,18 @@ public class TerraformController {
     private static final Logger logger = LoggerFactory.getLogger(TerraformController.class);
 
     private final FileInputHandler fileInputHandler;
-    private final TerraformParser terraformParser;
-    private final BasicResourceExtractor resourceExtractor;
-    private final SimpleNeo4jMapper neo4jMapper;
-    private final TerraformSummarizer terraformSummarizer;
+    private final TerraformTextMerger terraformTextMerger;
     private final LLMInfrastructureAnalyzer llmAnalyzer;
-    private final IntelligentNeo4jMapper intelligentMapper;
+    private final DirectNeo4jMapper directNeo4jMapper;
 
     public TerraformController(FileInputHandler fileInputHandler,
-                             TerraformParser terraformParser,
-                             BasicResourceExtractor resourceExtractor,
-                             SimpleNeo4jMapper neo4jMapper,
-                             TerraformSummarizer terraformSummarizer,
+                             TerraformTextMerger terraformTextMerger,
                              LLMInfrastructureAnalyzer llmAnalyzer,
-                             IntelligentNeo4jMapper intelligentMapper) {
+                             DirectNeo4jMapper directNeo4jMapper) {
         this.fileInputHandler = fileInputHandler;
-        this.terraformParser = terraformParser;
-        this.resourceExtractor = resourceExtractor;
-        this.neo4jMapper = neo4jMapper;
-        this.terraformSummarizer = terraformSummarizer;
+        this.terraformTextMerger = terraformTextMerger;
         this.llmAnalyzer = llmAnalyzer;
-        this.intelligentMapper = intelligentMapper;
+        this.directNeo4jMapper = directNeo4jMapper;
     }
 
     @Operation(
@@ -115,41 +102,28 @@ public class TerraformController {
                     .content(request.getContent())
                     .build();
 
-            // Parse the Terraform content
-            ParsedTerraform parsed = terraformParser.parse(List.of(terraformFile));
+            // NEW TEXT-BASED PIPELINE:
 
-            // Check for parsing errors
-            if (parsed.hasParseErrors()) {
-                logger.warn("Terraform parsing completed with {} errors", parsed.getParseErrors().size());
-                return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                        .body(ErrorResponse.parsingError(
-                                "Terraform configuration contains parsing errors",
-                                parsed.getParseErrors()));
-            }
+            // 1. Merge Terraform files into LLM-optimized text format
+            MergedTerraformText mergedText = terraformTextMerger.mergeTerraformFiles(List.of(terraformFile));
+            logger.info("Text merging completed: {} characters, {} resources identified", 
+                       mergedText.getContentLength(), mergedText.getTotalResources());
 
-            // NEW INTELLIGENT FLOW:
+            // 2. Analyze with enhanced LLM using direct text processing
+            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(mergedText);
+            logger.info("Enhanced LLM analysis completed with {} resources and {} relationships",
+                       llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size());
 
-            // 1. Create JSON summary for LLM analysis
-            String terraformSummary = terraformSummarizer.createSummary(parsed);
-            logger.debug("Created Terraform summary for LLM analysis");
+            // 3. Create Neo4j graph directly from LLM analysis
+            directNeo4jMapper.createGraphFromLLMAnalysis(llmAnalysis);
 
-            // 2. Analyze with LLM to get relationships and insights
-            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(terraformSummary);
-            logger.info("LLM analysis completed with {} relationships and {} insights",
-                       llmAnalysis.getRelationships().size(), llmAnalysis.getInsights().size());
+            // Build enhanced response with new pipeline results
+            ParseResponse response = buildEnhancedParseResponseFromLLM(mergedText, llmAnalysis);
+            response.setMessage(String.format("Successfully processed Terraform content using direct text analysis: %d resources with %d relationships mapped to Neo4j graph",
+                                            llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size()));
 
-            // 3. Extract infrastructure components (for basic node creation)
-            List<InfrastructureComponent> components = resourceExtractor.extractComponents(parsed);
-
-            // 4. Create intelligent Neo4j graph with LLM-derived relationships
-            intelligentMapper.mapToIntelligentGraph(components, llmAnalysis);
-
-            // Build enhanced response
-            ParseResponse response = buildEnhancedParseResponse(components, parsed, llmAnalysis);
-            response.setMessage(String.format("Successfully parsed and mapped %d resources with %d intelligent relationships to Neo4j graph",
-                                            components.size(), llmAnalysis.getRelationships().size()));
-
-            logger.info("Successfully processed Terraform content: {} resources mapped to graph", components.size());
+            logger.info("Successfully processed Terraform content with new pipeline: {} resources, {} relationships", 
+                       llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size());
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException e) {
@@ -228,42 +202,28 @@ public class TerraformController {
 
             logger.info("Found {} Terraform files in uploaded zip", terraformFiles.size());
 
-            // Parse the Terraform files
-            ParsedTerraform parsed = terraformParser.parse(terraformFiles);
+            // NEW TEXT-BASED PIPELINE (same as parse endpoint):
 
-            // Check for parsing errors
-            if (parsed.hasParseErrors()) {
-                logger.warn("Terraform parsing completed with {} errors", parsed.getParseErrors().size());
-                return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                        .body(ErrorResponse.parsingError(
-                                "Terraform configuration contains parsing errors",
-                                parsed.getParseErrors()));
-            }
+            // 1. Merge Terraform files into LLM-optimized text format
+            MergedTerraformText mergedText = terraformTextMerger.mergeTerraformFiles(terraformFiles);
+            logger.info("Text merging completed: {} characters, {} resources identified", 
+                       mergedText.getContentLength(), mergedText.getTotalResources());
 
-            // NEW INTELLIGENT FLOW (same as parse endpoint):
+            // 2. Analyze with enhanced LLM using direct text processing
+            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(mergedText);
+            logger.info("Enhanced LLM analysis completed with {} resources and {} relationships",
+                       llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size());
 
-            // 1. Create JSON summary for LLM analysis
-            String terraformSummary = terraformSummarizer.createSummary(parsed);
-            logger.debug("Created Terraform summary for LLM analysis");
+            // 3. Create Neo4j graph directly from LLM analysis
+            directNeo4jMapper.createGraphFromLLMAnalysis(llmAnalysis);
 
-            // 2. Analyze with LLM to get relationships and insights
-            LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis = llmAnalyzer.analyzeInfrastructure(terraformSummary);
-            logger.info("LLM analysis completed with {} relationships and {} insights",
-                       llmAnalysis.getRelationships().size(), llmAnalysis.getInsights().size());
+            // Build enhanced response with new pipeline results
+            ParseResponse response = buildEnhancedParseResponseFromLLM(mergedText, llmAnalysis);
+            response.setMessage(String.format("Successfully processed %d Terraform files using direct text analysis: %d resources with %d relationships mapped to Neo4j graph",
+                                            terraformFiles.size(), llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size()));
 
-            // 3. Extract infrastructure components (for basic node creation)
-            List<InfrastructureComponent> components = resourceExtractor.extractComponents(parsed);
-
-            // 4. Create intelligent Neo4j graph with LLM-derived relationships
-            intelligentMapper.mapToIntelligentGraph(components, llmAnalysis);
-
-            // Build enhanced response
-            ParseResponse response = buildEnhancedParseResponse(components, parsed, llmAnalysis);
-            response.setMessage(String.format("Successfully parsed %d Terraform files and mapped %d resources with %d intelligent relationships to Neo4j graph",
-                                            terraformFiles.size(), components.size(), llmAnalysis.getRelationships().size()));
-
-            logger.info("Successfully processed Terraform zip: {} files, {} resources mapped to graph", 
-                       terraformFiles.size(), components.size());
+            logger.info("Successfully processed Terraform zip with new pipeline: {} files, {} resources, {} relationships", 
+                       terraformFiles.size(), llmAnalysis.getResources().size(), llmAnalysis.getRelationships().size());
             return ResponseEntity.ok(response);
 
         } catch (IOException e) {
@@ -296,110 +256,112 @@ public class TerraformController {
     }
 
     /**
-     * Builds an enhanced ParseResponse with LLM analysis results.
+     * Builds an enhanced ParseResponse from LLM analysis results using the new text-based pipeline.
+     * Extracts resource counts and provider information from LLM results and maintains existing response structure.
      *
-     * @param components List of infrastructure components
-     * @param parsed Parsed Terraform configuration
-     * @param llmAnalysis LLM analysis results
-     * @return Enhanced ParseResponse with relationships and insights
+     * @param mergedText Merged Terraform text with metadata
+     * @param llmAnalysis LLM analysis results with resources and relationships
+     * @return Enhanced ParseResponse with new pipeline metrics
      */
-    private ParseResponse buildEnhancedParseResponse(List<InfrastructureComponent> components,
-                                                   ParsedTerraform parsed,
-                                                   LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis) {
-        ParseResponse response = ParseResponse.success("Intelligent parsing completed successfully", components.size());
+    private ParseResponse buildEnhancedParseResponseFromLLM(MergedTerraformText mergedText,
+                                                           LLMInfrastructureAnalyzer.LLMAnalysisResult llmAnalysis) {
+        ParseResponse response = ParseResponse.success("Direct text analysis completed successfully", 
+                                                      llmAnalysis.getResources().size());
 
-        // Count identity vs regular resources
-        long identityCount = components.stream()
-                .filter(c -> c.getIdentityType() == IdentityType.IDENTITY_RESOURCE)
-                .count();
-        long regularCount = components.size() - identityCount;
-
-        response.setIdentityResourceCount((int) identityCount);
-        response.setRegularResourceCount((int) regularCount);
-
-        // Collect unique providers
-        List<String> providers = components.stream()
-                .map(InfrastructureComponent::getProvider)
-                .distinct()
-                .filter(provider -> !"UNKNOWN".equals(provider))
-                .collect(Collectors.toList());
-        response.setProvidersDetected(providers);
-
-        // Create resource type summary
-        Map<String, Long> resourceTypeCounts = components.stream()
-                .collect(Collectors.groupingBy(InfrastructureComponent::getType, Collectors.counting()));
+        // Extract resource counts and provider information from LLM results
+        Map<String, Long> resourceTypeCounts = llmAnalysis.getResources().stream()
+                .collect(Collectors.groupingBy(resource -> resource.getType() != null ? resource.getType() : "unknown", 
+                                             Collectors.counting()));
 
         resourceTypeCounts.forEach((type, count) ->
                 response.addResourceTypeSummary(type, count.intValue()));
 
-        // Add LLM analysis insights to response
-        if (llmAnalysis != null) {
-            // Add relationship count information
-            response.addProperty("relationshipsFound", llmAnalysis.getRelationships().size());
-            response.addProperty("insightsGenerated", llmAnalysis.getInsights().size());
+        // Collect unique providers from LLM analysis
+        List<String> providers = llmAnalysis.getResources().stream()
+                .map(resource -> resource.getProvider())
+                .distinct()
+                .filter(provider -> provider != null && !"unknown".equals(provider) && !provider.trim().isEmpty())
+                .collect(Collectors.toList());
+        response.setProvidersDetected(providers);
 
-            // Add architecture summary
-            if (llmAnalysis.getSummary() != null) {
-                response.addProperty("architectureType", llmAnalysis.getSummary().getArchitectureType());
-                response.addProperty("complexity", llmAnalysis.getSummary().getComplexity());
-                response.addProperty("mainPurpose", llmAnalysis.getSummary().getMainPurpose());
-            }
+        // Categorize resources by type for identity vs regular classification
+        long identityResourceCount = llmAnalysis.getResources().stream()
+                .filter(resource -> isIdentityResource(resource.getType()))
+                .count();
+        long regularResourceCount = llmAnalysis.getResources().size() - identityResourceCount;
 
-            // Add high-severity insights as warnings
-            llmAnalysis.getInsights().stream()
-                    .filter(insight -> "HIGH".equals(insight.getSeverity()))
-                    .forEach(insight -> response.addError("HIGH PRIORITY: " + insight.getTitle() + " - " + insight.getDescription()));
-        }
+        response.setIdentityResourceCount((int) identityResourceCount);
+        response.setRegularResourceCount((int) regularResourceCount);
 
-        // Add any parsing errors
-        if (parsed.hasParseErrors()) {
-            response.setErrors(parsed.getParseErrors());
+        // Add relationship information
+        response.addProperty("relationshipsFound", llmAnalysis.getRelationships().size());
+        
+        // Add relationship type breakdown
+        Map<String, Long> relationshipTypeCounts = llmAnalysis.getRelationships().stream()
+                .collect(Collectors.groupingBy(rel -> rel.getType() != null ? rel.getType() : "UNKNOWN", 
+                                             Collectors.counting()));
+        response.addProperty("relationshipTypes", relationshipTypeCounts);
+
+        // Add new metrics for text processing performance
+        response.addProperty("filesProcessed", mergedText.getFileNames().size());
+        response.addProperty("contentLength", mergedText.getContentLength());
+        response.addProperty("textMergingMode", mergedText.getMetadata("fallback_mode") != null ? "fallback" : "intelligent");
+        response.addProperty("providersFromText", mergedText.getProviders().size());
+        response.addProperty("logicalGroups", mergedText.getResourceGroups() != null ? 
+                           mergedText.getResourceGroups().getTotalGroups() : 0);
+        
+        // Add processing statistics
+        response.addProperty("totalResourcesFromText", mergedText.getTotalResources());
+        response.addProperty("averageConfidence", calculateAverageConfidence(llmAnalysis.getRelationships()));
+        response.addProperty("highConfidenceRelationships", countHighConfidenceRelationships(llmAnalysis.getRelationships()));
+        
+        // Add metadata about text merging quality
+        if (mergedText.getMetadata() != null) {
+            response.addProperty("textMergingMetadata", mergedText.getMetadata());
         }
 
         return response;
     }
 
     /**
-     * Builds a comprehensive ParseResponse from the processed components and parsed Terraform.
-     *
-     * @param components List of infrastructure components
-     * @param parsed Parsed Terraform configuration
-     * @return ParseResponse with detailed information
+     * Determines if a resource type is an identity-related resource.
+     * Used for maintaining compatibility with existing response structure.
      */
-    private ParseResponse buildParseResponse(List<InfrastructureComponent> components, ParsedTerraform parsed) {
-        ParseResponse response = ParseResponse.success("Parsing completed successfully", components.size());
-
-        // Count identity vs regular resources
-        long identityCount = components.stream()
-                .filter(c -> c.getIdentityType() == IdentityType.IDENTITY_RESOURCE)
-                .count();
-        long regularCount = components.size() - identityCount;
-
-        response.setIdentityResourceCount((int) identityCount);
-        response.setRegularResourceCount((int) regularCount);
-
-        // Collect unique providers
-        List<String> providers = components.stream()
-                .map(InfrastructureComponent::getProvider)
-                .distinct()
-                .filter(provider -> !"UNKNOWN".equals(provider))
-                .collect(Collectors.toList());
-        response.setProvidersDetected(providers);
-
-        // Create resource type summary
-        Map<String, Long> resourceTypeCounts = components.stream()
-                .collect(Collectors.groupingBy(InfrastructureComponent::getType, Collectors.counting()));
-
-        resourceTypeCounts.forEach((type, count) -> 
-                response.addResourceTypeSummary(type, count.intValue()));
-
-        // Add any parsing errors (though we typically don't reach here if there are errors)
-        if (parsed.hasParseErrors()) {
-            response.setErrors(parsed.getParseErrors());
-        }
-
-        return response;
+    private boolean isIdentityResource(String resourceType) {
+        if (resourceType == null) return false;
+        
+        String lowerType = resourceType.toLowerCase();
+        return lowerType.contains("iam") || 
+               lowerType.contains("role") || 
+               lowerType.contains("policy") || 
+               lowerType.contains("user") ||
+               lowerType.contains("group") ||
+               lowerType.contains("permission") ||
+               lowerType.contains("identity");
     }
+
+    /**
+     * Calculates the average confidence score of relationships.
+     */
+    private double calculateAverageConfidence(List<com.terraform.neo4j.model.LLMRelationship> relationships) {
+        if (relationships.isEmpty()) return 0.0;
+        
+        return relationships.stream()
+                .mapToDouble(rel -> rel.getConfidence())
+                .average()
+                .orElse(0.0);
+    }
+
+    /**
+     * Counts relationships with high confidence (>= 0.8).
+     */
+    private long countHighConfidenceRelationships(List<com.terraform.neo4j.model.LLMRelationship> relationships) {
+        return relationships.stream()
+                .filter(rel -> rel.getConfidence() >= 0.8)
+                .count();
+    }
+
+
 
     /**
      * Validates if the uploaded file is a zip file based on content type and filename.
