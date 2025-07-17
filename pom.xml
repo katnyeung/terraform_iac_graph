@@ -29,18 +29,7 @@
             <artifactId>spring-boot-starter-data-neo4j</artifactId>
         </dependency>
         
-        <!-- HCL4j for Terraform parsing -->
-        <dependency>
-            <groupId>com.bertramlabs.plugins</groupId>
-            <artifactId>hcl4j</artifactId>
-            <version>0.7.5</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-parent</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
+
         
         <!-- Swagger/OpenAPI 3 -->
         <dependency>

@@ -1,6 +1,9 @@
 package com.terraform.neo4j.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.terraform.neo4j.model.LLMRelationship;
+import com.terraform.neo4j.model.LLMResource;
+import com.terraform.neo4j.model.MergedTerraformText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,10 +14,15 @@ import org.springframework.web.client.RestTemplate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
- * Service that uses LLM to analyze Terraform infrastructure and generate
+ * Service that uses LLM to analyze Terraform infrastructure from raw text and generate
  * meaningful relationships and insights for Neo4j graph creation.
+ * 
+ * This service processes MergedTerraformText objects that contain optimized Terraform
+ * configurations for LLM analysis, replacing the legacy HCL4j-based parsing approach.
  */
 @Service
 public class LLMInfrastructureAnalyzer {
@@ -33,94 +41,273 @@ public class LLMInfrastructureAnalyzer {
     @Value("${llm.model:gpt-3.5-turbo}")
     private String model;
 
+    @Value("${llm.max.tokens:4000}")
+    private int maxTokens;
+
+    @Value("${llm.temperature:0.2}")
+    private double temperature;
+
     public LLMInfrastructureAnalyzer() {
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
     }
 
     /**
-     * Analyzes Terraform infrastructure using LLM to generate meaningful
-     * relationships and graph structure.
+     * Analyzes Terraform infrastructure using LLM with direct text processing.
+     * This is the enhanced method that accepts MergedTerraformText for better analysis.
      *
-     * @param terraformSummary JSON summary of Terraform configuration
-     * @return LLM analysis result with relationships
+     * @param mergedTerraformText Merged and formatted Terraform text optimized for LLM
+     * @return LLM analysis result with relationships and resources
+     * @throws IllegalArgumentException if mergedTerraformText is null or invalid
      */
-    public LLMAnalysisResult analyzeInfrastructure(String terraformSummary) {
-        logger.info("Starting LLM analysis of Terraform infrastructure");
+    public LLMAnalysisResult analyzeInfrastructure(MergedTerraformText mergedTerraformText) {
+        if (mergedTerraformText == null) {
+            throw new IllegalArgumentException("MergedTerraformText cannot be null");
+        }
+        
+        if (!mergedTerraformText.isReadyForLLM()) {
+            logger.warn("MergedTerraformText is not ready for LLM processing: {}", mergedTerraformText.getSummary());
+            return new LLMAnalysisResult();
+        }
+
+        logger.info("Starting enhanced LLM analysis of Terraform infrastructure with direct text processing");
+        logger.info("Processing {} files with {} resources, content length: {} characters", 
+                   mergedTerraformText.getFileNames().size(), 
+                   mergedTerraformText.getTotalResources(),
+                   mergedTerraformText.getContentLength());
 
         try {
-            String prompt = buildAnalysisPrompt(terraformSummary);
-            String llmResponse = callLLMAPI(prompt);
+            // Validate content size for LLM processing
+            if (mergedTerraformText.getContentLength() > 50000) {
+                logger.warn("Large Terraform content ({} chars) may exceed LLM token limits", 
+                           mergedTerraformText.getContentLength());
+            }
 
-            logger.debug("LLM Response: {}", llmResponse);
+            String prompt = buildEnhancedAnalysisPrompt(mergedTerraformText);
+            logger.debug("Built enhanced prompt with {} characters", prompt.length());
+            
+            String llmResponse = callLLMAPI(prompt);
+            logger.info("Received LLM response with {} characters", llmResponse.length());
+            logger.debug("Full LLM Response: {}", llmResponse);
 
             LLMAnalysisResult result = parseLLMResponse(llmResponse);
-            logger.info("LLM analysis completed. Found {} relationships",
-                    result.getRelationships().size());
+            
+            // Validate and log analysis results
+            validateAnalysisResult(result, mergedTerraformText);
+            
+            logger.info("Enhanced LLM analysis completed. Found {} resources and {} relationships",
+                    result.getResources().size(), result.getRelationships().size());
 
             return result;
 
         } catch (Exception e) {
-            logger.error("Error during LLM analysis", e);
+            logger.error("Error during enhanced LLM analysis", e);
             // Return empty result instead of failing completely
             return new LLMAnalysisResult();
         }
     }
 
     /**
-     * Builds the analysis prompt for the LLM.
+     * Validates the LLM analysis result against the input to ensure quality.
      */
-    private String buildAnalysisPrompt(String terraformSummary) {
+    private void validateAnalysisResult(LLMAnalysisResult result, MergedTerraformText input) {
+        if (result.getResources().isEmpty() && input.getTotalResources() > 0) {
+            logger.warn("LLM analysis found no resources despite {} resources in input", input.getTotalResources());
+        }
+        
+        if (result.getRelationships().isEmpty() && result.getResources().size() > 1) {
+            logger.warn("LLM analysis found no relationships despite {} resources", result.getResources().size());
+        }
+        
+        // Check for resource count discrepancy
+        int foundResources = result.getResources().size();
+        int expectedResources = input.getTotalResources();
+        if (foundResources < expectedResources * 0.5) {
+            logger.warn("LLM analysis found significantly fewer resources ({}) than expected ({})", 
+                       foundResources, expectedResources);
+        }
+        
+        // Log provider coverage
+        Set<String> foundProviders = result.getResources().stream()
+                .map(LLMResource::getProvider)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        
+        Set<String> expectedProviders = input.getProviders();
+        if (!foundProviders.containsAll(expectedProviders)) {
+            logger.warn("LLM analysis may have missed some providers. Expected: {}, Found: {}", 
+                       expectedProviders, foundProviders);
+        }
+    }
+
+
+
+    /**
+     * Builds the enhanced analysis prompt for direct Terraform text processing.
+     * Utilizes rich metadata from MergedTerraformText for better LLM analysis.
+     */
+    private String buildEnhancedAnalysisPrompt(MergedTerraformText mergedTerraformText) {
+        StringBuilder contextInfo = new StringBuilder();
+        
+        // Add file information
+        contextInfo.append("FILES PROCESSED: ").append(String.join(", ", mergedTerraformText.getFileNames())).append("\n");
+        contextInfo.append("TOTAL RESOURCES: ").append(mergedTerraformText.getTotalResources()).append("\n");
+        contextInfo.append("PROVIDERS: ").append(String.join(", ", mergedTerraformText.getProviders())).append("\n");
+        contextInfo.append("CONTENT LENGTH: ").append(mergedTerraformText.getContentLength()).append(" characters\n");
+        
+        // Add logical grouping information if available
+        if (mergedTerraformText.getResourceGroups() != null && 
+            mergedTerraformText.getResourceGroups().getGroupedResources() != null) {
+            contextInfo.append("RESOURCE GROUPS: ");
+            mergedTerraformText.getResourceGroups().getGroupedResources().keySet()
+                .forEach(group -> contextInfo.append(group).append(" "));
+            contextInfo.append("\n");
+        }
+        
+        // Add cross-reference information if available
+        if (mergedTerraformText.getCrossReferences() != null) {
+            contextInfo.append("CROSS-REFERENCES DETECTED: ")
+                      .append(mergedTerraformText.getCrossReferences().getTotalDependencies())
+                      .append(" dependencies\n");
+        }
+        
+        // Add file boundaries information for better context
+        if (mergedTerraformText.getFileBoundaries() != null && !mergedTerraformText.getFileBoundaries().isEmpty()) {
+            contextInfo.append("FILE BOUNDARIES: ");
+            mergedTerraformText.getFileBoundaries().keySet()
+                .forEach(file -> contextInfo.append(file).append(" "));
+            contextInfo.append("\n");
+        }
+        
+        // Add metadata information if available
+        if (mergedTerraformText.getMetadata() != null && !mergedTerraformText.getMetadata().isEmpty()) {
+            contextInfo.append("PROCESSING METADATA: ");
+            mergedTerraformText.getMetadata().forEach((key, value) -> 
+                contextInfo.append(key).append("=").append(value).append(" "));
+            contextInfo.append("\n");
+        }
+        
         return String.format("""
-            You are an expert infrastructure architect specializing in detailed resource relationship mapping. Analyze the following Terraform configuration and map ALL possible relationships between resources with precise technical details.
-            
-            Terraform Configuration Summary:
+            You are an expert Terraform infrastructure analyst. Analyze the following complete Terraform configuration and extract ALL resource relationships with precise technical accuracy.
+
+            CONTEXT INFORMATION:
             %s
+
+            TERRAFORM CONFIGURATION:
+            ================================================================================
+            %s
+            ================================================================================
+
+            ANALYSIS REQUIREMENTS:
+            1. Identify every resource by its exact Terraform identifier (e.g., "aws_efs_file_system.ai_impact")
+            2. Map ALL relationships including:
+               - Direct references (resource.name.attribute)
+               - Module dependencies (module.name.output)
+               - Implicit dependencies (security groups, subnets, etc.)
+               - Provider relationships
+               - Variable usage and output consumption
+
+            RELATIONSHIP TYPE DEFINITIONS WITH EXAMPLES:
             
-            Your task is to create a comprehensive relationship map for Neo4j graph database. Focus ONLY on relationships - do NOT provide insights, summaries, or recommendations.
+            DEPENDS_ON: One resource requires another to exist first
+            - Example: aws_instance.web → aws_security_group.web_sg
+            - Description: "EC2 instance depends on security group for network access rules"
             
-            Please provide your analysis in the following JSON format:
+            PROVIDES_STORAGE_FOR: Storage resources serving compute/application resources
+            - Example: aws_efs_file_system.shared → aws_instance.web
+            - Description: "EFS file system provides persistent storage for EC2 instances"
+            
+            DEPLOYED_ON: Applications/services deployed on infrastructure platforms
+            - Example: helm_release.nginx → module.eks
+            - Description: "Nginx Helm chart deployed on EKS cluster infrastructure"
+            
+            PROTECTED_BY: Resources protected by security mechanisms
+            - Example: aws_instance.web → aws_security_group.web_sg
+            - Description: "EC2 instance network traffic protected by security group rules"
+            
+            MANAGES: Management and orchestration relationships
+            - Example: kubernetes_storage_class.efs → aws_efs_file_system.shared
+            - Description: "Kubernetes storage class manages EFS file system provisioning"
+            
+            ROUTES_TO: Network traffic routing relationships
+            - Example: aws_lb.main → aws_instance.web
+            - Description: "Application load balancer routes HTTP traffic to EC2 instances"
+            
+            MOUNTS: File system mounting relationships
+            - Example: aws_efs_mount_target.main → aws_efs_file_system.shared
+            - Description: "EFS mount target provides network access point for file system"
+            
+            CONFIGURES: Configuration and setup relationships
+            - Example: aws_iam_role.eks_node → aws_eks_node_group.main
+            - Description: "IAM role configures permissions for EKS node group instances"
+            
+            USES: General resource usage relationships
+            - Example: aws_instance.web → aws_subnet.private
+            - Description: "EC2 instance uses private subnet for network placement"
+
+            RESOURCE IDENTIFICATION EXAMPLES:
+            
+            For "resource aws_instance web { ... }":
             {
+              "id": "aws_instance.web",
+              "type": "aws_instance",
+              "name": "web",
+              "provider": "aws",
+              "properties": {
+                "instance_type": "t3.micro",
+                "ami": "ami-12345678"
+              }
+            }
+            
+            For "resource helm_release cert_manager { ... }":
+            {
+              "id": "helm_release.cert_manager",
+              "type": "helm_release",
+              "name": "cert_manager",
+              "provider": "helm",
+              "properties": {
+                "chart": "cert-manager",
+                "namespace": "cert-manager"
+              }
+            }
+
+            OUTPUT FORMAT (JSON only, no markdown):
+            {
+              "resources": [
+                {
+                  "id": "exact_terraform_identifier",
+                  "type": "terraform_resource_type", 
+                  "name": "resource_name",
+                  "provider": "aws|kubernetes|helm|etc",
+                  "properties": {
+                    "key_properties": "extracted_from_terraform"
+                  }
+                }
+              ],
               "relationships": [
                 {
-                  "source": "exact_resource_type.exact_resource_name",
-                  "target": "exact_resource_type.exact_resource_name", 
-                  "type": "CONNECTS_TO|DEPENDS_ON|MANAGES|ROUTES_TO|STORES_IN|AUTHENTICATES_WITH|PROVIDES_STORAGE_FOR|DEPLOYED_ON|PROTECTED_BY|USES|CONFIGURES|MOUNTS|ACCESSES",
-                  "description": "Detailed technical description of how these resources interact",
+                  "source": "exact_terraform_identifier",
+                  "target": "exact_terraform_identifier",
+                  "type": "RELATIONSHIP_TYPE",
+                  "description": "detailed_technical_description",
                   "confidence": 0.95
                 }
               ]
             }
-            
+
             CRITICAL REQUIREMENTS:
-            1. Map EVERY possible relationship between ALL resources mentioned in the configuration
-            2. Include relationships for:
-               - EKS cluster connections to Helm applications
-               - EFS file system relationships to mount targets, security groups, and Kubernetes storage classes
-               - Security group relationships to resources they protect
-               - Helm application dependencies and interactions
-               - Provider configurations and their target resources
-               - Module outputs and the resources that consume them
-            
-            3. Use exact resource identifiers from the configuration (e.g., "aws_efs_file_system.ai_impact", "helm_release.cert_manager")
-            4. For module references like "module.eks", map relationships to the actual resources that would be created by that module
-            5. Include both explicit dependencies (depends_on) and implicit relationships (network access, storage mounting, etc.)
-            6. Be specific about HOW resources interact (e.g., "EFS mount target provides NFS access point for EKS pods to mount persistent storage")
-            
-            RELATIONSHIP TYPES TO FOCUS ON:
-            - DEPLOYED_ON: Helm releases deployed on EKS cluster
-            - PROVIDES_STORAGE_FOR: EFS providing storage for EKS workloads
-            - MANAGES: Storage classes managing EFS provisioning
-            - PROTECTED_BY: Resources protected by security groups
-            - MOUNTS: Mount targets providing access to file systems
-            - ROUTES_TO: Ingress controllers routing traffic
-            - DEPENDS_ON: Explicit and implicit dependencies
-            - CONFIGURES: Configuration relationships
-            - USES: Resource usage relationships
-            
-            Map relationships with confidence > 0.8. Provide detailed technical descriptions explaining the exact nature of each relationship.
-            """, terraformSummary);
+            - Extract EVERY resource definition from the Terraform configuration
+            - Map ALL possible relationships between resources
+            - Use exact resource identifiers as they appear in the configuration
+            - Include both explicit (depends_on) and implicit relationships
+            - Provide detailed technical descriptions explaining HOW resources interact
+            - Set confidence levels: 0.9-1.0 for explicit references, 0.8-0.9 for implicit dependencies
+            - Focus on infrastructure connectivity, dependencies, and data flow
+            - Identify cross-provider relationships (AWS → Kubernetes → Helm)
+            """, contextInfo.toString(), mergedTerraformText.getMergedContent());
     }
+
+
 
     /**
      * Calls the LLM API with the analysis prompt.
@@ -147,7 +334,8 @@ public class LLMInfrastructureAnalyzer {
                 headers.set("anthropic-version", "2023-06-01");
 
                 requestBody.put("model", model);
-                requestBody.put("max_tokens", 2000);
+                requestBody.put("max_tokens", maxTokens);
+                requestBody.put("temperature", temperature);
                 requestBody.put("messages", List.of(
                         Map.of("role", "user", "content", prompt)
                 ));
@@ -158,10 +346,11 @@ public class LLMInfrastructureAnalyzer {
 
                 requestBody.put("model", model);
                 requestBody.put("messages", List.of(
+                        Map.of("role", "system", "content", "You are an expert Terraform infrastructure analyst. Analyze Terraform configurations and extract resources and relationships with precise technical accuracy. Always respond with valid JSON only."),
                         Map.of("role", "user", "content", prompt)
                 ));
-                requestBody.put("max_tokens", 2000);
-                requestBody.put("temperature", 0.3);
+                requestBody.put("max_tokens", maxTokens);
+                requestBody.put("temperature", temperature);
             }
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
@@ -203,6 +392,28 @@ public class LLMInfrastructureAnalyzer {
     private String getMockLLMResponse() {
         return """
             {
+              "resources": [
+                {
+                  "id": "aws_instance.web",
+                  "type": "aws_instance",
+                  "name": "web",
+                  "provider": "aws",
+                  "properties": {
+                    "instance_type": "t3.micro",
+                    "ami": "ami-12345678"
+                  }
+                },
+                {
+                  "id": "aws_db_instance.database",
+                  "type": "aws_db_instance",
+                  "name": "database",
+                  "provider": "aws",
+                  "properties": {
+                    "engine": "mysql",
+                    "instance_class": "db.t3.micro"
+                  }
+                }
+              ],
               "relationships": [
                 {
                   "source": "aws_instance.web",
@@ -211,21 +422,7 @@ public class LLMInfrastructureAnalyzer {
                   "description": "Web server connects to database for data persistence",
                   "confidence": 0.85
                 }
-              ],
-              "insights": [
-                {
-                  "type": "ARCHITECTURE_PATTERN",
-                  "title": "Two-tier Architecture",
-                  "description": "Classic web server and database architecture pattern detected",
-                  "severity": "LOW",
-                  "resources": ["aws_instance.web", "aws_db_instance.database"]
-                }
-              ],
-              "summary": {
-                "architectureType": "monolith",
-                "complexity": "low",
-                "mainPurpose": "Simple web application with database backend"
-              }
+              ]
             }
             """;
     }
@@ -257,107 +454,61 @@ public class LLMInfrastructureAnalyzer {
      * Result class for LLM analysis.
      */
     public static class LLMAnalysisResult {
-        private List<InfrastructureRelationship> relationships = List.of();
+        private List<LLMResource> resources = List.of();
+        private List<LLMRelationship> relationships = List.of();
 
         public static LLMAnalysisResult fromMap(Map<String, Object> map) {
             LLMAnalysisResult result = new LLMAnalysisResult();
 
-            // Parse relationships
+            // Parse resources with validation
+            if (map.containsKey("resources")) {
+                try {
+                    List<Map<String, Object>> resourceMaps = (List<Map<String, Object>>) map.get("resources");
+                    result.resources = resourceMaps.stream()
+                            .map(resourceMap -> {
+                                try {
+                                    return LLMResource.fromMap(resourceMap);
+                                } catch (Exception e) {
+                                    logger.warn("Failed to parse resource: {}", e.getMessage());
+                                    return null;
+                                }
+                            })
+                            .filter(Objects::nonNull)
+                            .toList();
+                } catch (Exception e) {
+                    logger.error("Error parsing resources from LLM response", e);
+                    result.resources = List.of();
+                }
+            }
+
+            // Parse relationships with validation
             if (map.containsKey("relationships")) {
-                List<Map<String, Object>> relationshipMaps = (List<Map<String, Object>>) map.get("relationships");
-                result.relationships = relationshipMaps.stream()
-                        .map(InfrastructureRelationship::fromMap)
-                        .toList();
+                try {
+                    List<Map<String, Object>> relationshipMaps = (List<Map<String, Object>>) map.get("relationships");
+                    result.relationships = relationshipMaps.stream()
+                            .map(relationshipMap -> {
+                                try {
+                                    return LLMRelationship.fromMap(relationshipMap);
+                                } catch (Exception e) {
+                                    logger.warn("Failed to parse relationship: {}", e.getMessage());
+                                    return null;
+                                }
+                            })
+                            .filter(Objects::nonNull)
+                            .toList();
+                } catch (Exception e) {
+                    logger.error("Error parsing relationships from LLM response", e);
+                    result.relationships = List.of();
+                }
             }
 
             return result;
         }
 
         // Getters
-        public List<InfrastructureRelationship> getRelationships() { return relationships; }
-
-        // Dummy methods for backward compatibility (return empty collections)
-        public List<InfrastructureInsight> getInsights() { return List.of(); }
-        public ArchitectureSummary getSummary() { return new ArchitectureSummary(); }
+        public List<LLMResource> getResources() { return resources; }
+        public List<LLMRelationship> getRelationships() { return relationships; }
     }
 
-    /**
-     * Represents a relationship between infrastructure resources.
-     */
-    public static class InfrastructureRelationship {
-        private String source;
-        private String target;
-        private String type;
-        private String description;
-        private double confidence;
 
-        public static InfrastructureRelationship fromMap(Map<String, Object> map) {
-            InfrastructureRelationship rel = new InfrastructureRelationship();
-            rel.source = (String) map.get("source");
-            rel.target = (String) map.get("target");
-            rel.type = (String) map.get("type");
-            rel.description = (String) map.get("description");
-            rel.confidence = map.containsKey("confidence") ?
-                    ((Number) map.get("confidence")).doubleValue() : 0.5;
-            return rel;
-        }
-
-        // Getters
-        public String getSource() { return source; }
-        public String getTarget() { return target; }
-        public String getType() { return type; }
-        public String getDescription() { return description; }
-        public double getConfidence() { return confidence; }
-    }
-
-    /**
-     * Represents an architectural insight or recommendation.
-     */
-    public static class InfrastructureInsight {
-        private String type;
-        private String title;
-        private String description;
-        private String severity;
-        private List<String> resources;
-
-        public static InfrastructureInsight fromMap(Map<String, Object> map) {
-            InfrastructureInsight insight = new InfrastructureInsight();
-            insight.type = (String) map.get("type");
-            insight.title = (String) map.get("title");
-            insight.description = (String) map.get("description");
-            insight.severity = (String) map.get("severity");
-            insight.resources = map.containsKey("resources") ?
-                    (List<String>) map.get("resources") : List.of();
-            return insight;
-        }
-
-        // Getters
-        public String getType() { return type; }
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getSeverity() { return severity; }
-        public List<String> getResources() { return resources; }
-    }
-
-    /**
-     * Summary of the overall architecture.
-     */
-    public static class ArchitectureSummary {
-        private String architectureType;
-        private String complexity;
-        private String mainPurpose;
-
-        public static ArchitectureSummary fromMap(Map<String, Object> map) {
-            ArchitectureSummary summary = new ArchitectureSummary();
-            summary.architectureType = (String) map.get("architectureType");
-            summary.complexity = (String) map.get("complexity");
-            summary.mainPurpose = (String) map.get("mainPurpose");
-            return summary;
-        }
-
-        // Getters
-        public String getArchitectureType() { return architectureType; }
-        public String getComplexity() { return complexity; }
-        public String getMainPurpose() { return mainPurpose; }
-    }
 }
